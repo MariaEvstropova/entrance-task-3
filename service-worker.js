@@ -4,16 +4,21 @@
  * Сервис-воркер, обеспечивающий оффлайновую работу избранного
  */
 
-const CACHE_VERSION = '1.0.0-broken';
+const CACHE_VERSION = '1.0.1';
+const FILES_TO_CACHE = [
+    'gifs.html'
+];
 
-importScripts('../vendor/kv-keeper.js-1.0.4/kv-keeper.js');
+importScripts('./vendor/kv-keeper.js-1.0.4/kv-keeper.js');
 
 
 self.addEventListener('install', event => {
-    const promise = preCacheAllFavorites()
+    const promise = preCacheHTML()
+        .then(() => preCacheAllFavorites())
         // Вопрос №1: зачем нужен этот вызов?
         .then(() => self.skipWaiting())
         .then(() => console.log('[ServiceWorker] Installed!'));
+
 
     event.waitUntil(promise);
 });
@@ -53,6 +58,12 @@ self.addEventListener('message', event => {
     event.waitUntil(promise);
 });
 
+function preCacheHTML() {
+  return caches.open(CACHE_VERSION)
+      .then(cache => {
+          return cache.addAll(FILES_TO_CACHE);
+      });
+}
 
 // Положить в новый кеш все добавленные в избранное картинки
 function preCacheAllFavorites() {
