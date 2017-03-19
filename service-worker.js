@@ -4,7 +4,7 @@
  * Сервис-воркер, обеспечивающий оффлайновую работу избранного
  */
 
-const CACHE_VERSION = '1.0.4';
+const CACHE_VERSION = '1.0.6';
 const FILES_TO_CACHE = [
     'gifs.html',
     './assets/blocks.js',
@@ -15,6 +15,8 @@ const FILES_TO_CACHE = [
     './vendor/bem-components-dist-5.0.0/touch-phone/bem-components.dev.css',
     './vendor/kv-keeper.js-1.0.4/kv-keeper.js'
 ];
+//Если гифка была добавлена в офлайне, записать сюда её url чтобы закешировать потом
+let failedToLoad = [];
 
 importScripts('./vendor/kv-keeper.js-1.0.4/kv-keeper.js');
 
@@ -43,7 +45,16 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    let response = fetchWithFallbackToCache(event.request);
+    const url = new URL(event.request.url);
+    const cacheKey = url.origin + url.pathname;
+
+    let response;
+    //Проверить не надо ли кешировать этот запрос
+    if (failedToLoad.includes(cacheKey)) {
+        response = fetchAndPutToCache(cacheKey, event.request);
+    } else {
+        response = fetchWithFallbackToCache(event.request);
+    }
     event.respondWith(response);
 });
 
@@ -136,7 +147,14 @@ function fetchAndPutToCache(cacheKey, request) {
             return caches.open(CACHE_VERSION)
                 .then(cache => {
                     // Вопрос №5: для чего нужно клонирование?
-                    cache.put(cacheKey, response.clone());
+                    cache.put(cacheKey, response.clone())
+                    .then(() => {
+                        //Успешно закешировали, уберем из списка
+                        let indexToRemove = failedToLoad.indexOf(cacheKey);
+                        if (indexToRemove !== -1) {
+                            failedToLoad.splice(indexToRemove, 1);
+                        }
+                    });
                 })
                 .then(() => response);
         })
@@ -159,7 +177,8 @@ function fetchWithFallbackToCache(request) {
 
 // Обработать сообщение от клиента
 const messageHandlers = {
-    'favorite:add': handleFavoriteAdd
+    'favorite:add': handleFavoriteAdd,
+    'favorite:remove': handleFavoriteRemove
 };
 
 function handleMessage(eventData) {
@@ -188,6 +207,28 @@ function handleFavoriteAdd(id, data) {
                     return Promise.all(
                         responses.map(response => cache.put(response.url, response))
                     );
+                })
+                .catch((response) => {
+                    console.log('[ServiceWorker] Can\'t put to cache:', id);
+                    //Не удалось закешировать, запишем в массив и закешируем при след. запросе
+                    urls.forEach(url => failedToLoad.push(url));
+                });
+        });
+}
+
+// Обработать сообщение об удалении картинки из избранного
+function handleFavoriteRemove(id, data) {
+    return caches.open(CACHE_VERSION)
+        .then(cache => {
+            const urls = [].concat(
+                data.fallback,
+                (data.sources || []).map(item => item.url)
+            );
+
+            return Promise
+                .all(urls.map(url => cache.delete(url)))
+                .catch((response) => {
+                    console.log('[ServiceWorker] Can\'t remove from cache:', id);
                 });
         });
 }
