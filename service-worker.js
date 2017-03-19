@@ -4,16 +4,23 @@
  * Сервис-воркер, обеспечивающий оффлайновую работу избранного
  */
 
-const CACHE_VERSION = '1.0.1';
+const CACHE_VERSION = '1.0.2';
 const FILES_TO_CACHE = [
-    'gifs.html'
+    'gifs.html',
+    './assets/blocks.js',
+    './assets/star.svg',
+    './assets/style.css',
+    './assets/templates.js',
+    './vendor/bem-components-dist-5.0.0/touch-phone/bem-components.dev.js',
+    './vendor/bem-components-dist-5.0.0/touch-phone/bem-components.dev.css',
+    './vendor/kv-keeper.js-1.0.4/kv-keeper.js'
 ];
 
 importScripts('./vendor/kv-keeper.js-1.0.4/kv-keeper.js');
 
 
 self.addEventListener('install', event => {
-    const promise = preCacheHTML()
+    const promise = preCacheAssets()
         .then(() => preCacheAllFavorites())
         // Вопрос №1: зачем нужен этот вызов?
         .then(() => self.skipWaiting())
@@ -36,19 +43,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    const url = new URL(event.request.url);
-
-    // Вопрос №3: для всех ли случаев подойдёт такое построение ключа?
-    const cacheKey = url.origin + url.pathname;
-
-    let response;
-    if (needStoreForOffline(cacheKey)) {
-        response = caches.match(cacheKey)
-            .then(cacheResponse => cacheResponse || fetchAndPutToCache(cacheKey, event.request));
-    } else {
-        response = fetchWithFallbackToCache(event.request);
-    }
-
+    let response = fetchWithFallbackToCache(event.request);
     event.respondWith(response);
 });
 
@@ -58,7 +53,7 @@ self.addEventListener('message', event => {
     event.waitUntil(promise);
 });
 
-function preCacheHTML() {
+function preCacheAssets() {
   return caches.open(CACHE_VERSION)
       .then(cache => {
           return cache.addAll(FILES_TO_CACHE);
@@ -132,13 +127,6 @@ function deleteObsoleteCaches() {
                     })
             );
         });
-}
-
-// Нужно ли при скачивании сохранять ресурс для оффлайна?
-function needStoreForOffline(cacheKey) {
-    return cacheKey.includes('vendor/') ||
-        cacheKey.includes('assets/') ||
-        cacheKey.endsWith('jquery.min.js');
 }
 
 // Скачать и добавить в кеш
