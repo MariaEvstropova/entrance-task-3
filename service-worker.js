@@ -4,7 +4,7 @@
  * Сервис-воркер, обеспечивающий оффлайновую работу избранного
  */
 
-const CACHE_VERSION = '1.0.2';
+const CACHE_VERSION = '1.0.4';
 const FILES_TO_CACHE = [
     'gifs.html',
     './assets/blocks.js',
@@ -151,7 +151,9 @@ function fetchWithFallbackToCache(request) {
     return fetch(request)
         .catch(() => {
             console.log('[ServiceWorker] Fallback to offline cache:', request.url);
-            return caches.match(request.url);
+            const url = new URL(request.url);
+            const cacheKey = url.origin + url.pathname;
+            return caches.match(cacheKey);
         });
 }
 
